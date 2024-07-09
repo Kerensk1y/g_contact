@@ -38,7 +38,7 @@ def download_contacts(service):
     results = service.people().connections().list(
         resourceName='people/me',
         pageSize=1000,
-        personFields='names,emailAddresses,phoneNumbers,memberships'
+        personFields='names,emailAddresses,phoneNumbers,memberships,biographies'
     ).execute()
     
     connections = results.get('connections', [])
@@ -51,6 +51,7 @@ def download_contacts(service):
                 name = person.get('names', [{}])[0].get('displayName', 'No Name')
                 emails = [email['value'] for email in person.get('emailAddresses', [])]
                 phones = [phone['value'] for phone in person.get('phoneNumbers', [])]
+                notes = person.get('biographies', [{}])[0].get('value', 'No Notes')
                 
                 if label not in label_groups:
                     label_groups[label] = []
@@ -58,7 +59,8 @@ def download_contacts(service):
                 label_groups[label].append({
                     'Name': name, 
                     'Emails': ', '.join(emails),
-                    'Phones': ', '.join(phones)
+                    'Phones': ', '.join(phones),
+                    'Notes': notes
                 })
     
     return label_groups
@@ -71,7 +73,7 @@ def save_contacts_to_csv(label_groups):
     for label, contacts in label_groups.items():
         filename = os.path.join('contacts', f'{label}.csv')
         with open(filename, mode='w', newline='', encoding='utf-8') as file:
-            writer = csv.DictWriter(file, fieldnames=['Name', 'Emails', 'Phones'])
+            writer = csv.DictWriter(file, fieldnames=['Name', 'Emails', 'Phones', 'Notes'])
             writer.writeheader()
             writer.writerows(contacts)
 
