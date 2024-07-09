@@ -1,9 +1,10 @@
 import os
 import csv
-import google.auth
+import json
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
 
 # Устанавливаем путь к файлу с учетными данными OAuth 2.0
 CREDENTIALS_FILE = 'credentials.json'
@@ -14,7 +15,14 @@ SCOPES = ['https://www.googleapis.com/auth/contacts.readonly']
 def authenticate_google_api():
     creds = None
     if os.path.exists(TOKEN_FILE):
-        creds = google.auth.load_credentials_from_file(TOKEN_FILE, SCOPES)
+        with open(TOKEN_FILE, 'r') as token:
+            creds_info = json.load(token)
+            try:
+                creds = Credentials.from_authorized_user_info(creds_info, SCOPES)
+            except ValueError as e:
+                print(f"Error loading credentials: {e}")
+                creds = None
+
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
@@ -30,7 +38,7 @@ def download_contacts(service):
     results = service.people().connections().list(
         resourceName='people/me',
         pageSize=1000,
-        personFields='names,emailAddresses,memberships'
+        personFields='names,emailAddresses,phoneNumbers,memberships'
     ).execute()
     
     connections = results.get('connections', [])
@@ -42,11 +50,16 @@ def download_contacts(service):
                 label = membership['metadata'].get('source', {}).get('id', 'no_label')
                 name = person.get('names', [{}])[0].get('displayName', 'No Name')
                 emails = [email['value'] for email in person.get('emailAddresses', [])]
+                phones = [phone['value'] for phone in person.get('phoneNumbers', [])]
                 
                 if label not in label_groups:
                     label_groups[label] = []
                 
-                label_groups[label].append({'Name': name, 'Emails': ', '.join(emails)})
+                label_groups[label].append({
+                    'Name': name, 
+                    'Emails': ', '.join(emails),
+                    'Phones': ', '.join(phones)
+                })
     
     return label_groups
 
@@ -58,7 +71,7 @@ def save_contacts_to_csv(label_groups):
     for label, contacts in label_groups.items():
         filename = os.path.join('contacts', f'{label}.csv')
         with open(filename, mode='w', newline='', encoding='utf-8') as file:
-            writer = csv.DictWriter(file, fieldnames=['Name', 'Emails'])
+            writer = csv.DictWriter(file, fieldnames=['Name', 'Emails', 'Phones'])
             writer.writeheader()
             writer.writerows(contacts)
 
